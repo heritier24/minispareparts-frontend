@@ -1,5 +1,12 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { localStorageService } from '../services/localStorageService'
+import { apiService } from '@/services/apiService'
+import HomeView from '@/views/HomeView.vue'
+import LoginView from '@/views/LoginView.vue'
+import VehicleForm from '@/views/VehicleForm.vue'
+import ServiceList from '@/views/ServiceList.vue'
+import ServiceQueue from '@/views/ServiceQueue.vue'
+import StatusBoard from '@/views/StatusBoard.vue'
+import PartsInventory from '@/views/PartsInventory.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -7,19 +14,19 @@ const router = createRouter({
     {
       path: '/login',
       name: 'Login',
-      component: () => import('@/views/LoginView.vue')
+      component: LoginView
     },
     {
       path: '/',
       name: 'Home',
-      component: () => import('@/views/HomeView.vue'),
+      component: HomeView,
       meta: { requiresAuth: true },
       children: [
         {
           path: '',
           name: 'Dashboard',
           components: {
-            dashboard: () => import('@/views/StatusBoard.vue')
+            dashboard: StatusBoard
           },
           meta: { requiresManager: true }
         },
@@ -27,7 +34,7 @@ const router = createRouter({
           path: 'vehicle-form',
           name: 'VehicleForm',
           components: {
-            dashboard: () => import('@/views/VehicleForm.vue')
+            dashboard: VehicleForm
           },
           meta: { requiresReceptionist: true }
         },
@@ -35,7 +42,7 @@ const router = createRouter({
           path: 'services',
           name: 'ServiceList',
           components: {
-            dashboard: () => import('@/views/ServiceList.vue')
+            dashboard: ServiceList
           },
           meta: { requiresReceptionist: true }
         },
@@ -43,7 +50,7 @@ const router = createRouter({
           path: 'service-queue',
           name: 'ServiceQueue',
           components: {
-            dashboard: () => import('@/views/ServiceQueue.vue')
+            dashboard: ServiceQueue
           },
           meta: { requiresMechanic: true }
         },
@@ -51,17 +58,21 @@ const router = createRouter({
           path: 'parts-inventory',
           name: 'PartsInventory',
           components: {
-            dashboard: () => import('@/views/PartsInventory.vue')
+            dashboard: PartsInventory
           },
           meta: { requiresManager: true }
         }
       ]
+    },
+    {
+      path: '/:pathMatch(.*)*',
+      redirect: { name: 'Home' }
     }
   ]
 })
 
 // router.beforeEach((to, from, next) => {
-//   const currentUser = localStorageService.getCurrentUser()
+//   const currentUser = apiService.getCurrentUser()
 
 //   if (to.meta.requiresAuth && !currentUser) {
 //     next({ name: 'Login' })

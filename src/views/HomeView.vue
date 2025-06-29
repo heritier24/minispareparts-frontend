@@ -73,15 +73,46 @@
 </template>
 
 <script setup lang="ts">
+import { apiService } from '@/services/apiService'
 import { ref } from 'vue'
-import { localStorageService } from '@/services/localStorageService'
+import { useRouter } from 'vue-router'
 
-const isManager = ref(localStorageService.getCurrentUser()?.role === 'manager')
-const isReceptionist = ref(localStorageService.getCurrentUser()?.role === 'receptionist')
-const isMechanic = ref(localStorageService.getCurrentUser()?.role === 'mechanic')
+// Define User interface for type safety
+interface User {
+  id: number
+  name: string
+  email: string
+  role: 'manager' | 'receptionist' | 'mechanic'
+}
 
-const handleLogout = (): void => {
-  localStorageService.clearAll()
-  window.location.href = '/login'
+const currentUser = ref<User | null>(apiService.getCurrentUser())
+const isManager = ref(currentUser.value?.role === 'manager')
+const isReceptionist = ref(currentUser.value?.role === 'receptionist' || currentUser.value?.role === 'manager')
+const isMechanic = ref(currentUser.value?.role === 'mechanic')
+const isLoading = ref(false)
+const router = useRouter()
+
+// Check authentication on mount
+if (!currentUser.value) {
+  router.push({ name: 'Login' })
+}
+
+// Logout function with loading state and error handling
+const handleLogout = async (event: Event): Promise<void> => {
+  event.preventDefault() // Prevent default <a> navigation
+  isLoading.value = true
+  try {
+    await apiService.logout()
+    currentUser.value = null
+    isManager.value = false
+    isReceptionist.value = false
+    isMechanic.value = false
+    router.push({ name: 'Login' })
+  } catch (error) {
+    console.error('Logout failed:', error)
+    // Optionally notify user of error (e.g., with toast)
+  } finally {
+    isLoading.value = false
+  }
 }
 </script>
