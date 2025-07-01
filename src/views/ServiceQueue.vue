@@ -45,26 +45,30 @@
                       <td class="px-6 py-4 text-sm dark:text-white/80">{{ service.vehicle.licensePlate }}</td>
                       <td class="px-6 py-4 text-sm dark:text-white/80">{{ new Date(service.createdAt).toLocaleDateString() }}</td>
                       <td class="px-6 py-4 text-sm">
-                        <button @click="acceptService(service.id)" class="mr-2 text-blue-500 hover:underline">
+                        <button @click="acceptService(service.id)" class="mr-2 text-blue-500 hover:underline" :disabled="isLoading">
                           <i class="fas fa-check-circle"></i> Accept
                         </button>
-                        <button @click="requestParts(service.id)" class="text-orange-500 hover:underline">
+                        <button @click="requestParts(service.id)" class="text-orange-500 hover:underline" :disabled="isLoading">
                           <i class="fas fa-box"></i> Request Parts
                         </button>
                       </td>
+                    </tr>
+                    <tr v-if="!filteredServices.length && !isLoading">
+                      <td colspan="4" class="px-6 py-4 text-sm text-center dark:text-white/80">No new services found</td>
                     </tr>
                   </tbody>
                 </table>
               </div>
               <div class="flex justify-between items-center mt-4 px-6">
-                <button :disabled="currentPage === 1" @click="currentPage--" class="px-4 py-2 text-sm text-blue-500 border border-blue-500 rounded-lg disabled:opacity-50">
+                <button :disabled="currentPage === 1 || isLoading" @click="currentPage--" class="px-4 py-2 text-sm text-blue-500 border border-blue-500 rounded-lg disabled:opacity-50">
                   Previous
                 </button>
                 <span>Page {{ currentPage }} of {{ totalPages }}</span>
-                <button :disabled="currentPage === totalPages" @click="currentPage++" class="px-4 py-2 text-sm text-blue-500 border border-blue-500 rounded-lg disabled:opacity-50">
+                <button :disabled="currentPage === totalPages || isLoading" @click="currentPage++" class="px-4 py-2 text-sm text-blue-500 border border-blue-500 rounded-lg disabled:opacity-50">
                   Next
                 </button>
               </div>
+              <p v-if="error" class="text-red-500 text-sm mt-4 text-center">{{ error }}</p>
             </div>
           </div>
         </div>
@@ -88,9 +92,10 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { localStorageService } from '@/services/localStorageService'
+import { apiService } from '@/services/apiService'
 
 interface Vehicle {
+  id: number
   make: string
   model: string
   year: number
@@ -98,16 +103,20 @@ interface Vehicle {
 }
 
 interface Service {
-  id: string
-  vehicle: Vehicle
+  id: number
+  vehicleId: number
   status: 'new-service' | 'in-service' | 'completed'
+  assignedMechanic: string | null
   createdAt: string
+  vehicle: Vehicle
 }
 
 const searchQuery = ref('')
 const currentPage = ref(1)
 const itemsPerPage = 10
 const services = ref<Service[]>([])
+const isLoading = ref(false)
+const error = ref<string>('')
 
 const filteredServices = computed(() => {
   let result = services.value.filter(s => s.status === 'new-service')
@@ -123,28 +132,47 @@ const filteredServices = computed(() => {
 
 const totalPages = computed(() => Math.ceil(services.value.filter(s => s.status === 'new-service').length / itemsPerPage))
 
-const fetchServices = (): void => {
-  services.value = localStorageService.getServices().filter(s => s.status === 'new-service')
-}
-
-watch([searchQuery, currentPage], fetchServices, { immediate: true })
-
-const acceptService = (id: string): void => {
-  const service = services.value.find(s => s.id === id)
-  if (service) {
-    service.status = 'in-service'
-    service.assignedMechanic = localStorageService.getCurrentUser()?.name || 'Mechanic'
-    localStorageService.updateService(service)
-    fetchServices()
+const fetchServices = async (): Promise<void> => {
+  isLoading.value = true
+  error.value = ''
+  try {
+    const response = await apiService.getServices()
+    services.value = response
+  } catch (err: any) {
+    error.value = err.response?.data?.error || 'Failed to fetch services'
+    console.error('Fetch services error:', err)
+  } finally {
+    isLoading.value = false
   }
 }
 
-const requestParts = (id: string): void => {
+const acceptService = async (id: number): Promise<void> => {
+  isLoading.value = true
+  error.value = ''
+  try {
+    const service = services.value.find(s => s.id === id)
+    if (service) {
+      const updatedService = {
+        ...service,
+        status: 'in-service' as const,
+        assignedMechanic: apiService.getCurrentUser()?.name || 'Mechanic User'
+      }
+      const response = await apiService.updateService(updatedService)
+      if (response) {
+        services.value = services.value.map(s => (s.id === id ? response : s))
+      }
+    }
+  } catch (err: any) {
+    error.value = err.response?.data?.error || 'Failed to accept service'
+    console.error('Accept service error:', err)
+  } finally {
+    isLoading.value = false
+  }
+}
+
+const requestParts = (id: number): void => {
   console.log(`Requested parts for service ${id}`)
 }
 
-const handleLogout = (): void => {
-  localStorageService.clearAll()
-  window.location.href = '/login'
-}
+watch([searchQuery, currentPage], fetchServices, { immediate: true })
 </script>
