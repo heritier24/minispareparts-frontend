@@ -42,10 +42,10 @@
                     <p v-if="errors.licensePlate" class="text-red-500 text-xs mt-1">{{ errors.licensePlate }}</p>
                   </div>
                   <div class="flex mt-6">
-                    <button @click="saveVehicle" class="inline-block px-8 py-2 text-xs font-bold text-white bg-blue-500 rounded-lg hover:-translate-y-px active:opacity-85">
+                    <button @click="saveVehicle" class="inline-block px-8 py-2 text-xs font-bold text-white bg-blue-500 rounded-lg hover:-translate-y-px active:opacity-85" :disabled="isLoading">
                       Register Vehicle
                     </button>
-                    <button @click="resetForm" class="inline-block px-8 py-2 ml-2 text-xs font-bold text-blue-500 border border-blue-500 rounded-lg hover:-translate-y-px active:opacity-85">
+                    <button @click="resetForm" class="inline-block px-8 py-2 ml-2 text-xs font-bold text-blue-500 border border-blue-500 rounded-lg hover:-translate-y-px active:opacity-85" :disabled="isLoading">
                       Reset
                     </button>
                   </div>
@@ -74,6 +74,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { apiService } from '@/services/apiService'
 
 interface VehicleForm {
@@ -83,38 +84,73 @@ interface VehicleForm {
   licensePlate: string
 }
 
+interface ErrorResponse {
+  make?: string
+  model?: string
+  year?: string
+  licensePlate?: string
+  vehicleId?: string
+  status?: string
+  assignedMechanic?: string
+  createdAt?: string
+  form?: string
+}
+
 const form = ref<VehicleForm>({
   make: '',
   model: '',
   year: 0,
   licensePlate: ''
 })
-const errors = ref({})
+const errors = ref<ErrorResponse>({})
+const isLoading = ref(false)
+const router = useRouter()
 
 const validateForm = (): boolean => {
   errors.value = {}
   if (!form.value.make) errors.value.make = 'Make is required'
   if (!form.value.model) errors.value.model = 'Model is required'
-  if (!form.value.year || form.value.year < 1900 || form.value.year > new Date().getFullYear()) errors.value.year = 'Valid year is required'
+  if (!form.value.year || form.value.year < 1900 || form.value.year > new Date().getFullYear()) {
+    errors.value.year = 'Year must be between 1900 and ' + new Date().getFullYear()
+  }
   if (!form.value.licensePlate) errors.value.licensePlate = 'License plate is required'
   return Object.keys(errors.value).length === 0
 }
 
 const saveVehicle = async (): Promise<void> => {
-  if (validateForm()) {
+  if (!validateForm()) return
+
+  isLoading.value = true
+  try {
     const vehicle = await apiService.addVehicle(form.value)
     if (vehicle) {
-      await apiService.addService({
-        id: '',
-        vehicle,
-        status: 'new-service',
-        assignedMechanic: null,
-        createdAt: new Date().toISOString()
-      })
-      resetForm()
+      try {
+        await apiService.addService({
+          vehicle_id: vehicle.id,
+          status: 'new-service',
+          assignedMechanic: 'Mechanic User',
+          createdAt: new Date().toISOString()
+        })
+        resetForm()
+        router.push({ name: 'ServiceList' })
+      } catch (serviceError: any) {
+        errors.value.form = serviceError.response?.data?.message || 'Failed to create service'
+        console.error('Service creation error:', serviceError)
+      }
     } else {
       errors.value.form = 'Failed to register vehicle'
     }
+  } catch (error: any) {
+    if (error.response?.status === 422) {
+      errors.value = error.response.data.errors || { form: 'Validation failed' }
+    } else if (error.response?.status === 403) {
+      errors.value.form = 'Unauthorized: Only receptionists can register vehicles'
+    } else {
+      errors.value.form = error.response?.data?.error || 'Failed to register vehicle'
+    }
+    console.error('Vehicle registration error:', error)
+  } finally {
+    isLoading.value = false
   }
 }
 

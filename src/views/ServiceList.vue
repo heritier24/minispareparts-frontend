@@ -63,18 +63,22 @@
                       <td class="px-6 py-4 text-sm dark:text-white/80">{{ service.assignedMechanic || 'Unassigned' }}</td>
                       <td class="px-6 py-4 text-sm dark:text-white/80">{{ new Date(service.createdAt).toLocaleDateString() }}</td>
                     </tr>
+                    <tr v-if="!filteredServices.length && !isLoading">
+                      <td colspan="5" class="px-6 py-4 text-sm text-center dark:text-white/80">No services found</td>
+                    </tr>
                   </tbody>
                 </table>
               </div>
               <div class="flex justify-between items-center mt-4 px-6">
-                <button :disabled="currentPage === 1" @click="currentPage--" class="px-4 py-2 text-sm text-blue-500 border border-blue-500 rounded-lg disabled:opacity-50">
+                <button :disabled="currentPage === 1 || isLoading" @click="currentPage--" class="px-4 py-2 text-sm text-blue-500 border border-blue-500 rounded-lg disabled:opacity-50">
                   Previous
                 </button>
                 <span>Page {{ currentPage }} of {{ totalPages }}</span>
-                <button :disabled="currentPage === totalPages" @click="currentPage++" class="px-4 py-2 text-sm text-blue-500 border border-blue-500 rounded-lg disabled:opacity-50">
+                <button :disabled="currentPage === totalPages || isLoading" @click="currentPage++" class="px-4 py-2 text-sm text-blue-500 border border-blue-500 rounded-lg disabled:opacity-50">
                   Next
                 </button>
               </div>
+              <p v-if="error" class="text-red-500 text-sm mt-4 text-center">{{ error }}</p>
             </div>
           </div>
         </div>
@@ -98,9 +102,10 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { localStorageService } from '@/services/localStorageService'
+import { apiService } from '@/services/apiService'
 
 interface Vehicle {
+  id: number
   make: string
   model: string
   year: number
@@ -108,11 +113,12 @@ interface Vehicle {
 }
 
 interface Service {
-  id: string
-  vehicle: Vehicle
+  id: number
+  vehicleId: number
   status: 'new-service' | 'in-service' | 'completed'
   assignedMechanic: string | null
   createdAt: string
+  vehicle: Vehicle
 }
 
 const searchQuery = ref('')
@@ -120,6 +126,8 @@ const filters = ref({ status: '' })
 const currentPage = ref(1)
 const itemsPerPage = 10
 const services = ref<Service[]>([])
+const isLoading = ref(false)
+const error = ref<string>('')
 
 const filteredServices = computed(() => {
   let result = services.value
@@ -138,14 +146,19 @@ const filteredServices = computed(() => {
 
 const totalPages = computed(() => Math.ceil(services.value.length / itemsPerPage))
 
-const fetchServices = (): void => {
-  services.value = localStorageService.getServices()
+const fetchServices = async (): Promise<void> => {
+  isLoading.value = true
+  error.value = ''
+  try {
+    const response = await apiService.getServices()
+    services.value = response
+  } catch (err: any) {
+    error.value = err.response?.data?.error || 'Failed to fetch services'
+    console.error('Fetch services error:', err)
+  } finally {
+    isLoading.value = false
+  }
 }
 
-watch([searchQuery, currentPage, filters], fetchServices, { immediate: true })
-
-const handleLogout = (): void => {
-  localStorageService.clearAll()
-  window.location.href = '/login'
-}
+watch([currentPage, filters], fetchServices, { immediate: true })
 </script>
